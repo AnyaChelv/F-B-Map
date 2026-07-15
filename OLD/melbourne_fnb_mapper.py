@@ -515,44 +515,37 @@ function normaliseCuisine(raw, category){
     let s = (raw||'').toString().toLowerCase().trim().replace(/[_\-]+/g,' ');
     if(!s) s = (category||'').toString().toLowerCase().trim().replace(/[_\-]+/g,' ');
     if(!s) return 'Other';
-    // Curated, FIXED buckets. Everything groups into one of these (or 'Other').
-    // Granular detail is preserved for the right-click sub-menu only.
     const map = [
       [/\b(bubble tea|boba)\b/,'Bubble Tea'],
-      [/\b(juice|smoothie|acai|drinks|beverage)\b/,'Drinks & Juice'],
-      [/\b(bakery|pastry|patisserie|bagel|croissant|pretzel)\b/,'Bakery'],
-      [/\b(coffee|cafe|caffee|breakfast|brunch|matcha)\b/,'Cafe'],
+      [/\b(juice|smoothie|tea|drinks|beverage)\b/,'Drinks & Juice'],
+      [/\b(bakery|pastry|patisserie|bagel|croissant)\b/,'Bakery'],
+      [/\b(coffee|cafe|breakfast|brunch)\b/,'Cafe'],
       [/\b(pub)\b/,'Pub'],
-      [/\b(bar|wine|beer|cocktail|biergarten|brewery|tapas)\b/,'Bar'],
+      [/\b(bar|wine|beer|cocktail|biergarten|brewery)\b/,'Bar'],
       [/\b(pizza|italian|pasta|trattoria)\b/,'Italian'],
-      [/\b(chinese|dumpling|dumplings|yum cha|cantonese|szechuan|sichuan|hotpot|hot pot|dim sum|uyghur|dum)\b/,'Chinese'],
-      [/\b(japanese|sushi|ramen|izakaya|yakitori|teppanyaki)\b/,'Japanese'],
+      [/\b(chinese|dumpling|dumplings|yum cha|cantonese|szechuan|sichuan|hotpot|hot pot)\b/,'Chinese'],
+      [/\b(japanese|sushi|ramen|izakaya|yakitori)\b/,'Japanese'],
       [/\b(korean|kbbq|bibimbap)\b/,'Korean'],
       [/\b(thai)\b/,'Thai'],
       [/\b(vietnamese|pho|banh mi)\b/,'Vietnamese'],
       [/\b(indian|curry|tandoori)\b/,'Indian'],
-      // Other Asian = SE/South/Central Asian + generic asian (keeps small ones grouped)
-      [/\b(asian|noodle|noodles|malaysian|indonesian|singaporean|singapore|taiwanese|filipino|cambodian|burmese|balinese|nepalese|nepali|tibetan|sri lankan|pakistani|afghan|bangladeshi)\b/,'Other Asian'],
-      // Mediterranean = Med + Middle Eastern (groups Persian/Arab/Turkish/etc.)
-      [/\b(mediterranean|greek|lebanese|turkish|middle eastern|falafel|kebab|souvlaki|persian|arab|israeli|yemeni|egyptian)\b/,'Mediterranean'],
-      [/\b(african|ethiopian|somali|somalian|eritrean|nigerian|sudanese|kenyan|ghanaian|senegalese|moroccan|tunisian|algerian|mauritian)\b/,'African'],
-      // European = non-Italian/Med European nationalities grouped together
-      [/\b(french|spanish|german|polish|portuguese|russian|croatian|balkan|dutch|danish|swiss|irish|english|british|european|norse|scandinavian)\b/,'European'],
+      [/\b(asian|noodle|noodles|malaysian|indonesian|singaporean|dim sum)\b/,'Other Asian'],
+      [/\b(african|ethiopian|somali|somalian|eritrean|nigerian|sudanese|kenyan|ghanaian|senegalese|moroccan|egyptian|tunisian|algerian)\b/,'African'],
+      [/\b(mediterranean|greek|lebanese|turkish|middle eastern|falafel|kebab)\b/,'Mediterranean'],
       [/\b(fish and chips|fish & chips|fish n chips)\b/,'Fish & Chips'],
       [/\b(burger|burgers)\b/,'Burgers'],
-      [/\b(fried chicken|chicken|wings)\b/,'Fried Chicken'],
-      [/\b(fast food|food court|hot dog|sandwich|takeaway|baked potato|wrap|pie|sausage|deli)\b/,'Other Fast Food'],
-      [/\b(ice cream|gelato|dessert|frozen yoghurt|frozen yogurt|yogurt|yoghurt|chocolate|donut|doughnut|confectionery|cake|crepe|pancake)\b/,'Dessert'],
+      [/\b(fried chicken|chicken)\b/,'Fried Chicken'],
+      [/\b(fast food|food court|hot dog|sandwich|takeaway)\b/,'Other Fast Food'],
+      [/\b(ice cream|gelato|dessert|frozen yoghurt|chocolate|donut|doughnut|confectionery)\b/,'Dessert'],
       [/\b(steak|grill|bbq|barbecue|american)\b/,'Grill & BBQ'],
       [/\b(seafood|fish)\b/,'Seafood'],
-      [/\b(mexican|burrito|taco|tacos|latin|tex mex|argentinian|brazilian|colombian|chilean|peruvian|peruvean)\b/,'Mexican & Latin'],
-      [/\b(vegan|vegetarian|salad|healthy|health food|poke)\b/,'Healthy & Veg'],
-      // generic sit-down descriptors -> Restaurant (keeps Australian/fusion/etc. grouped)
-      [/\b(restaurant|bistro|diner|fine dining|fusion|international|australian|modern australian|mainstream australian|californian|local|regional|meat|cheese)\b/,'Restaurant'],
+      [/\b(mexican|burrito|taco|tacos|latin)\b/,'Mexican & Latin'],
+      [/\b(restaurant)\b/,'Restaurant'],
+      [/\b(vegan|vegetarian|salad|healthy|poke)\b/,'Healthy & Veg'],
     ];
     for(const [re,label] of map){ if(re.test(s)) return label; }
-    // Anything still unmatched is grouped, never shown as its own chip.
-    return 'Other';
+    // Unknown-but-present tag: show it prettified rather than dumping in Other.
+    return titleCase(s);
 }
 // Proper formatting for known second-layer terms; everything else is title-cased.
 const SUB_FIX = {
@@ -670,12 +663,14 @@ filterCtrl.addTo(map);
 function buildCuisineSelector(){
     const counts = {};
     VENUES.forEach(v=>{ const c = normaliseCuisine(v.cuisine, v.category); counts[c]=(counts[c]||0)+1; });
-    // FIXED curated bucket list (~3 rows). Nothing outside this can become a chip.
     const order = ['Cafe','Bakery','Bar','Pub','Restaurant','Italian','Chinese','Japanese','Korean','Thai',
-      'Vietnamese','Indian','Other Asian','Mediterranean','European','African','Burgers','Fried Chicken',
-      'Fish & Chips','Other Fast Food','Grill & BBQ','Seafood','Mexican & Latin','Bubble Tea','Drinks & Juice',
+      'Vietnamese','Indian','Other Asian','Mediterranean','Burgers','Fried Chicken','Fish & Chips',
+      'Other Fast Food','Grill & BBQ','Seafood','Mexican & Latin','Bubble Tea','Drinks & Juice',
       'Dessert','Healthy & Veg'];
-    const arr = order.filter(c=>counts[c]);
+    // known cuisines first (in order), then any leftover labels alphabetically, 'Other' last
+    const known = order.filter(c=>counts[c]);
+    const extras = Object.keys(counts).filter(c=>!order.includes(c) && c!=='Other').sort();
+    const arr = known.concat(extras);
     if(counts['Other']) arr.push('Other');
     const bar = document.getElementById('cuisineBar');
     if(!bar) return;
