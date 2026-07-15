@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Melbourne F&amp;B Popularity Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<style>
+  html,body{height:100%;margin:0;font-family:"Segoe UI",Arial,sans-serif}
+  #map{position:absolute;top:52px;bottom:0;left:0;right:0}
+  #bar{position:absolute;top:0;left:0;right:0;height:52px;background:#1f2937;
+       color:#fff;display:flex;align-items:center;gap:14px;padding:0 16px;
+       box-sizing:border-box;z-index:1000;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+  #bar h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  #bar label{font-size:13px;background:#2563eb;padding:7px 12px;border-radius:6px;
+             cursor:pointer;white-space:nowrap}
+  #bar label:hover{background:#1d4ed8}
+  #bar input[type=file]{display:none}
+  #status{font-size:12px;color:#cbd5e1}
+  .legend{background:#fff;padding:10px 12px;border-radius:8px;line-height:1.5;
+          box-shadow:0 1px 6px rgba(0,0,0,.3);font-size:12px;max-width:240px}
+  .legend b{font-size:13px}
+  .swatch{display:inline-block;width:12px;height:12px;border-radius:50%;
+          margin-right:6px;vertical-align:middle}
+  .pop b{font-size:14px}
+  table.cmp{border-collapse:collapse;margin-top:4px;font-size:12px}
+  table.cmp td{border:1px solid #ddd;padding:2px 6px}
+  table.cmp tr.hdr td{background:#f1f5f9;font-weight:600}
+</style>
+</head>
+<body>
+<div id="bar">
+  <h1>🍽️ Melbourne F&amp;B Popularity Map</h1>
+  <label>📂 Load CSV<input type="file" id="file" accept=".csv"/></label>
+  <span id="status">Load a venues CSV (venues_base.csv or venues_master.csv) to begin…</span>
+</div>
+<div id="map"></div>
+
+<script>
+// ---------- map base ----------
+const map = L.map('map').setView([-37.82, 144.96], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+
+let reviewLayer=null, footLayer=null, reviewHeatL=null, footHeatL=null,
+    layerControl=null, legendCtl=null;
+
+// ---------- tiny robust CSV parser (handles quotes/commas/newlines) ----------
+function parseCSV(text){
+  const rows=[]; let row=[], field='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else q=false; }
+      else field+=c;
+    } else {
+      if(c==='"') q=true;
+      else if(c===',') { row.push(field); field=''; }
+      else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c==='\r'){ /* skip */ }
+      else field+=c;
+    }
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  const header=rows.shift().map(h=>h.trim());
+  return rows.filter(r=>r.length>1).map(r=>{
+    const o={}; header.forEach((h,idx)=>o[h]=(r[idx]??'').trim()); return o;
+  });
+}
+
+// ---------- styling helpers ----------
+function color(s){
+  if(s===''||s==null||isNaN(s)) return '#9e9e9e';
+  return s>80?'#800026':s>60?'#BD0026':s>40?'#E31A1C':
+         s>20?'#FC4E2A':s>0?'#FEB24C':'#FFEDA0';
+}
+function radius(s){ return (s===''||s==null||isNaN(s))?4:4+(s/100)*16; }
+
+function popup(v){
+  return `<div class="pop"><b>${v.name||'(unnamed)'}</b><br>
+    <i>${v.category||''}${v.cuisine?' &middot; '+v.cuisine:''}</i>
+    <table class="cmp">
+      <tr class="hdr"><td>A — Reviews</td><td></td></tr>
+      <tr><td>Rating</td><td>${v.rating||'-'} &#9733;</td></tr>
+      <tr><td>Review count</td><td>${v.review_count||'-'}</td></tr>
+      <tr><td>Velocity (/wk)</td><td>${v.review_velocity_per_week||'-'}</td></tr>
+      <tr><td>Review score</td><td>${v.popularity_review||'-'}/100</td></tr>
+      <tr class="hdr"><td>B — Foot traffic</td><td></td></tr>
+      <tr><td>Monthly visits (ABS)</td><td>${v.foot_monthly?Number(v.foot_monthly).toLocaleString():'-'}</td></tr>
+      <tr><td>Daily avg</td><td>${v.foot_daily_avg||'-'}</td></tr>
+      <tr><td>Dwell (min)</td><td>${v.dwell_min||'-'}</td></tr>
+      <tr><td>Foot score</td><td>${v.popularity_foot||'-'}/100</td></tr>
+    </table>
+    ${v.website?`<a href="${v.website}" target="_blank" rel="noopener">website</a>`:''}
+    </div>`;
+}
+
+// ---------- render venues ----------
+function render(venues){
+  // clear previous
+  [reviewLayer,footLayer,reviewHeatL,footHeatL].forEach(l=>{if(l)map.removeLayer(l);});
+  if(layerControl) map.removeControl(layerControl);
+  if(legendCtl)    map.removeControl(legendCtl);
+
+  reviewLayer=L.layerGroup(); footLayer=L.layerGroup();
+  const reviewHeat=[], footHeat=[]; const pts=[];
+
+  venues.forEach(v=>{
+    const lat=parseFloat(v.lat), lon=parseFloat(v.lon);
+    if(isNaN(lat)||isNaN(lon)) return;
+    pts.push([lat,lon]);
+    const rs = v.popularity_review===''?null:parseFloat(v.popularity_review);
+    const fs = v.popularity_foot===''  ?null:parseFloat(v.popularity_foot);
+
+    L.circleMarker([lat,lon],{radius:radius(rs),fillColor:color(rs),color:'#333',
+       weight:.5,fillOpacity:.85}).bindPopup(popup(v)).addTo(reviewLayer);
+    L.circleMarker([lat,lon],{radius:radius(fs),fillColor:color(fs),color:'#333',
+       weight:.5,fillOpacity:.85}).bindPopup(popup(v)).addTo(footLayer);
+
+    if(rs!=null&&!isNaN(rs)) reviewHeat.push([lat,lon,rs/100]);
+    if(fs!=null&&!isNaN(fs)) footHeat.push([lat,lon,fs/100]);
+  });
+
+  reviewHeatL=L.heatLayer(reviewHeat,{radius:25,blur:18,maxZoom:16});
+  footHeatL  =L.heatLayer(footHeat,  {radius:25,blur:18,maxZoom:16});
+
+  reviewLayer.addTo(map);   // default layer
+
+  layerControl=L.control.layers(null,{
+    "A: Review popularity (markers)": reviewLayer,
+    "A: Review popularity (heatmap)": reviewHeatL,
+    "B: Foot traffic ABS (markers)":  footLayer,
+    "B: Foot traffic ABS (heatmap)":  footHeatL
+  },{collapsed:false}).addTo(map);
+
+  legendCtl=L.control({position:'bottomright'});
+  legendCtl.onAdd=function(){
+    const d=L.DomUtil.create('div','legend');
+    d.innerHTML=`<b>Popularity score</b><br>
+      <span class="swatch" style="background:#800026"></span>80–100<br>
+      <span class="swatch" style="background:#BD0026"></span>60–80<br>
+      <span class="swatch" style="background:#E31A1C"></span>40–60<br>
+      <span class="swatch" style="background:#FC4E2A"></span>20–40<br>
+      <span class="swatch" style="background:#FEB24C"></span>0–20<br>
+      <span class="swatch" style="background:#9e9e9e"></span>no data<br>
+      <hr style="margin:6px 0">
+      Toggle <b>A</b> vs <b>B</b> top-right to compare methods.<br>
+      Marker size = score. Click a venue for side-by-side numbers.`;
+    return d;
+  };
+  legendCtl.addTo(map);
+
+  if(pts.length) map.fitBounds(pts);
+  document.getElementById('status').textContent =
+    `${venues.length.toLocaleString()} venues loaded • grey = no popularity data yet`;
+}
+
+// ---------- file loading ----------
+document.getElementById('file').addEventListener('change',function(e){
+  const f=e.target.files[0]; if(!f) return;
+  document.getElementById('status').textContent='Reading '+f.name+'…';
+  const rd=new FileReader();
+  rd.onload=ev=>{
+    try{ render(parseCSV(ev.target.result)); }
+    catch(err){ document.getElementById('status').textContent='Error: '+err.message; }
+  };
+  rd.readAsText(f);
+});
+</script>
+</body>
+</html>

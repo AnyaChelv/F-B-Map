@@ -1,0 +1,3 @@
+venue_name,latitude,longitude,monthly_visits,daily_avg_visits,dwell_time_min,source
+"Example Bar & Grill",-37.8210,144.9650,42000,1400,68,Techsalerator
+"Example Bubble Tea Co",-37.8125,144.9630,18500,617,12,xMap

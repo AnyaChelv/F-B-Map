@@ -1,0 +1,16 @@
+osm_id,osm_type,name,category,cuisine,lat,lon,address,suburb,website,opening_hours,rating,review_count,review_velocity_per_week,popularity_review,foot_monthly,foot_daily_avg,dwell_min,foot_source,popularity_foot
+1000,node,Chin Chin,restaurant,asian,-37.8149,144.97,,Melbourne,,,4.6,9800,20.8,79.3,45026,1500,60,Techsalerator,100.0
+1001,node,Cumulus Inc,restaurant,modern_australian,-37.8143,144.972,,Melbourne,,,4.4,3200,10.7,54.2,13160,438,47,Techsalerator,42.1
+1002,node,Gong Cha Swanston,bubble_tea,bubble_tea,-37.811,144.9645,,Melbourne,,,4.1,540,39.8,44.1,5396,179,33,Techsalerator,0.1
+1003,node,Chatime Melbourne Central,bubble_tea,bubble_tea,-37.81,144.963,,Melbourne,,,3.9,880,6.2,28.9,6236,207,80,Techsalerator,7.0
+1004,node,Movida,restaurant,spanish,-37.8168,144.969,,Melbourne,,,4.5,2600,33.1,66.0,18391,613,78,Techsalerator,57.9
+1005,node,Garden State Hotel,bar,pub_food,-37.8155,144.9685,,Melbourne,,,4.3,6100,23.2,72.2,32265,1075,56,Techsalerator,84.3
+1006,node,Lune Croissanterie,cafe,bakery,-37.7995,144.988,,Melbourne,,,4.7,4300,5.4,56.6,23314,777,20,Techsalerator,69.0
+1007,node,Pellegrini's,cafe,italian,-37.8135,144.972,,Melbourne,,,4.4,2100,31.4,61.1,14223,474,67,Techsalerator,45.8
+1008,node,Rooftop Bar Curtin House,bar,cocktail,-37.8112,144.9648,,Melbourne,,,4.2,3900,4.2,52.3,18379,612,53,Techsalerator,57.8
+1009,node,Supernormal,restaurant,asian,-37.8146,144.9718,,Melbourne,,,4.5,2800,27.2,63.3,13791,459,19,Techsalerator,44.3
+1010,node,Sharetea QV,bubble_tea,bubble_tea,-37.8095,144.966,,Melbourne,,,3.8,410,6.1,16.4,5379,179,53,Techsalerator,0.0
+1011,node,Flower Drum,restaurant,chinese,-37.8118,144.9695,,Melbourne,,,4.6,1500,7.3,40.9,11834,394,18,Techsalerator,37.1
+1012,node,The Croft Institute,bar,cocktail,-37.8122,144.9682,,Melbourne,,,4.0,1200,26.6,47.6,9332,311,17,Techsalerator,25.9
+1013,node,Brother Baba Budan,cafe,coffee,-37.8128,144.9615,,Melbourne,,,4.6,1900,50.0,72.5,13280,442,67,Techsalerator,42.5
+1014,node,Hophaus Southbank,bar,german,-37.8205,144.9645,,Melbourne,,,4.1,3300,9.2,52.5,16917,563,69,Techsalerator,53.9
