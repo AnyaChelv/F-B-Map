@@ -3,20 +3,15 @@
 melbourne_fnb_mapper.py
 
 Map every F&B venue in Melbourne (bars, restaurants, cafes, bubble-tea shops, etc.)
-and score how popular each one is using TWO independent, comparable methods:
-(A) REVIEWS  -> rating x review_count x review_velocity  (from Google Places)
-(B) FOOT     -> ABSOLUTE monthly foot count              (from a licensed vendor)
+and score how popular each one is.
 
-Pipeline (each step writes a CSV you can inspect):
+Pipeline:
   extract      Pull all F&B points-of-interest from OpenStreetMap (free, no key)
   reviews      Enrich those venues with Google Places rating/review data
   foottraffic  Merge a commercial foot-traffic vendor CSV (absolute counts)
   map          Build a standalone interactive HTML map (modern UI)
 
 Only external dependency: requests  (pip install requests)
-Everything else is Python standard library. Map = self-contained Leaflet HTML.
-
-Author: built for Anya Chelvathurai (Crown Resorts) - competitor F&B analysis
 """
 
 import argparse
@@ -34,43 +29,28 @@ except ImportError:
     requests = None  # only needed for extract and reviews
 
 # ---------------------------------------------------------------------------
-# CONFIG - tweak these transparently
+# CONFIG
 # ---------------------------------------------------------------------------
-
-# Default bounding box: Melbourne CBD + inner suburbs (S, W, N, E).
-# Widen this for Greater Melbourne, or pass --bbox "S,W,N,E".
 DEFAULT_BBOX = (-37.86, 144.90, -37.76, 145.02)
-
-# OSM amenity/shop tags that count as "F&B"
 OSM_AMENITIES = ["restaurant", "bar", "pub", "cafe", "fast_food",
                  "food_court", "ice_cream", "biergarten"]
 OSM_SHOPS = ["bubble_tea", "coffee", "confectionery", "pastry"]
-
 OVERPASS_URLS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 ]
+W_VOLUME = 0.50
+W_MOMENTUM = 0.30
+W_QUALITY = 0.20
+PLACES_MATCH_RADIUS_M = 80
+NAME_SIM_THRESHOLD = 0.55
 
-# How the REVIEW popularity score (0-100) is composed. Fully transparent + tunable.
-W_VOLUME = 0.50    # weight on review_count (log-scaled)  -> total footfall proxy
-W_MOMENTUM = 0.30  # weight on review_velocity            -> how "hot" right now
-W_QUALITY = 0.20   # weight on star rating                -> quality signal
-
-# Matching tolerances
-PLACES_MATCH_RADIUS_M = 80    # max metres between OSM point and Places match
-NAME_SIM_THRESHOLD = 0.55     # 0..1 fuzzy name similarity to accept a match
-
-# Fields the front-end JS reads for each venue (also the master CSV schema).
 MASTER_FIELDS = [
     "osm_id", "osm_type", "name", "category", "cuisine",
     "lat", "lon", "address", "suburb", "website", "opening_hours",
-    # reviews (method A)
     "rating", "review_count", "review_velocity_per_week", "popularity_review",
-    # foot traffic (method B) - ABSOLUTE
     "foot_monthly", "foot_daily_avg", "dwell_min", "foot_source", "popularity_foot",
 ]
-
-# Fields injected into the HTML map.
 JS_FIELDS = [
     "name", "category", "cuisine", "lat", "lon",
     "rating", "review_count", "review_velocity_per_week", "popularity_review",
@@ -78,11 +58,10 @@ JS_FIELDS = [
 ]
 
 # ---------------------------------------------------------------------------
-# SMALL UTILITIES
+# UTILITIES
 # ---------------------------------------------------------------------------
 
 def haversine_m(lat1, lon1, lat2, lon2):
-    "Great-circle distance in metres."
     R = 6371000.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dp = math.radians(lat2 - lat1)
@@ -92,7 +71,6 @@ def haversine_m(lat1, lon1, lat2, lon2):
 
 
 def name_similarity(a, b):
-    "Fuzzy string similarity 0..1 using stdlib difflib (no external deps)."
     from difflib import SequenceMatcher
     if not a or not b:
         return 0.0
@@ -120,7 +98,7 @@ def to_float(x, default=None):
         return default
 
 # ---------------------------------------------------------------------------
-# STEP 1 - EXTRACT venues from OpenStreetMap (Overpass API, free, no key)
+# STEP 1 - EXTRACT
 # ---------------------------------------------------------------------------
 
 def build_overpass_query(bbox):
@@ -131,12 +109,12 @@ def build_overpass_query(bbox):
     return f"""
 [out:json][timeout:180];
 (
-  node{box};
-  way {box};
-  node{box};
-  way {box};
-  node{box};
-  way {box};
+  node["amenity"~"^({am})$"]({box});
+  way ["amenity"~"^({am})$"]({box});
+  node["shop"~"^({sh})$"]({box});
+  way ["shop"~"^({sh})$"]({box});
+  node["cuisine"~"bubble_tea"]({box});
+  way ["cuisine"~"bubble_tea"]({box});
 );
 out center tags;
 """
@@ -157,7 +135,7 @@ def cmd_extract(args):
             r.raise_for_status()
             data = r.json()
             break
-        except Exception as ex:  # try the next mirror
+        except Exception as ex:
             print(f"  ! {url} failed: {ex}")
             time.sleep(2)
     if data is None:
@@ -168,10 +146,10 @@ def cmd_extract(args):
         tags = el.get("tags", {})
         name = tags.get("name")
         if not name:
-            continue  # skip unnamed POIs
+            continue
         if el["type"] == "node":
             lat, lon = el.get("lat"), el.get("lon")
-        else:  # way/relation -> use 'center'
+        else:
             c = el.get("center", {})
             lat, lon = c.get("lat"), c.get("lon")
         if lat is None or lon is None:
@@ -193,7 +171,6 @@ def cmd_extract(args):
             "opening_hours": tags.get("opening_hours", ""),
         })
 
-    # de-dup by (name, rounded coord)
     seen, deduped = set(), []
     for r in rows:
         key = (r["name"].lower(), round(float(r["lat"]), 5), round(float(r["lon"]), 5))
@@ -208,11 +185,10 @@ def cmd_extract(args):
     print(f"[extract] {len(deduped)} unique venues.")
 
 # ---------------------------------------------------------------------------
-# STEP 2 - REVIEWS: enrich with Google Places (rating, count, velocity)
+# STEP 2 - REVIEWS
 # ---------------------------------------------------------------------------
 
 def places_text_search(name, lat, lon, key):
-    "Google Places API (New) Text Search, biased to the venue's coordinate."
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
@@ -233,8 +209,6 @@ def places_text_search(name, lat, lon, key):
 
 
 def recent_velocity_from_reviews(reviews):
-    """First-run estimate: reviews/week implied by the (<=5) recent reviews Google
-    returns, using their publishTime. Rough but gives a same-day number."""
     times = []
     for rv in reviews or []:
         t = rv.get("publishTime")
@@ -302,7 +276,6 @@ def cmd_reviews(args):
         v["review_count"] = rc
 
         key = f"{name}|{lat}|{lon}"
-        # TRUE tracked velocity from previous run, else same-day estimate
         vel = None
         if key in prev:
             try:
@@ -320,7 +293,6 @@ def cmd_reviews(args):
         print(f"  [{i}/{len(venues)}] {name}: matched (r={rating}, n={rc})")
         time.sleep(args.sleep)
 
-    # write output + append history snapshot
     fields = list(venues[0].keys()) if venues else MASTER_FIELDS
     for extra in ("rating", "review_count", "review_velocity_per_week"):
         if extra not in fields:
@@ -329,12 +301,11 @@ def cmd_reviews(args):
     if hist_rows:
         write_csv(hist_path, hist_rows, ["key", "review_count", "ts"])
 
-    # score after enrichment
     compute_review_popularity(venues)
     write_csv(args.out, venues, fields + (["popularity_review"] if "popularity_review" not in fields else []))
 
 # ---------------------------------------------------------------------------
-# STEP 3 - FOOT TRAFFIC: merge a licensed vendor CSV (ABSOLUTE counts)
+# STEP 3 - FOOT TRAFFIC
 # ---------------------------------------------------------------------------
 
 def cmd_foottraffic(args):
@@ -367,7 +338,7 @@ def cmd_foottraffic(args):
     write_csv(args.out, venues, MASTER_FIELDS)
 
 # ---------------------------------------------------------------------------
-# SCORING - normalise both methods to 0..100 so they are comparable
+# SCORING
 # ---------------------------------------------------------------------------
 
 def _minmax(values):
@@ -408,33 +379,27 @@ def compute_foot_popularity(venues):
             v["popularity_foot"] = round(100 * (f - flo) / (fhi - flo), 1)
 
 # ---------------------------------------------------------------------------
-# STEP 4 - MAP: standalone interactive Leaflet HTML (modern UI)
-#   Data is injected as JSON at the /*__DATA__*/ token, so the browser
-#   ALWAYS has valid `const VENUES` and `const CENTER` (no paste errors).
+# STEP 4 - MAP
 # ---------------------------------------------------------------------------
 
-HTML_TEMPLATE = r"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Melbourne F&B Popularity Map</title>
-<link rel="stylom/leaflet@1.9.4/dist/leaflet.css
-1.9.4/dist/leaflet.js"></script>
-https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js>
-<style>
+HTML_HEAD = (
+    "<!DOCTYPE html>\n"
+    "<html><head><meta charset=\"utf-8\"/>\n"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"/>\n"
+    "<title>Melbourne F&B Popularity Map</title>\n"
+    "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\"/>\n"
+    "<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n"
+    "<script src=\"https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js\"></script>\n"
+)
+
+HTML_BODY = r"""<style>
   :root{
-    /* rating filter now uses the same green as the active cuisine chips */
     --brand:#22c9a9; --brand-2:#5eead4; --brand-soft:#E6FBF5;
     --ink:#2b2440; --muted:#8a8399; --line:#ece8f5;
     --chip-ink:#c9d1d9; --chip-active:#5eead4;
   }
   html,body,#map{height:100%;margin:0;font-family:'Segoe UI',Inter,Arial,sans-serif}
-  /* Almost-grayscale basemap so coloured venue dots stand out */
   .leaflet-tile-pane{filter:grayscale(1) contrast(.9) brightness(1.05)}
-  .legend{background:#fff;padding:10px 12px;border-radius:8px;line-height:1.5;
-          box-shadow:0 1px 6px rgba(0,0,0,.3);font-size:12px;max-width:230px}
-  .legend b{font-size:13px}
-  .swatch{display:inline-block;width:12px;height:12px;border-radius:50%;
-          margin-right:6px;vertical-align:middle}
   .pop b{font-size:14px}
   table.cmp{border-collapse:collapse;margin-top:4px;font-size:12px}
   table.cmp td{border:1px solid #ddd;padding:2px 6px}
@@ -462,7 +427,6 @@ https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js>
       background:linear-gradient(90deg,var(--brand),var(--brand-2));padding:11px;border-radius:26px;
       font-size:14px;font-weight:700;box-shadow:0 8px 18px rgba(34,201,169,.35)}
   .rc-apply:hover{filter:brightness(1.05)}
-  /* full-width cuisine bar (edge to edge), smaller font -> fits ~2 rows */
   .top-cuisine-bar{position:fixed;left:8px;right:8px;top:8px;display:flex;gap:6px;
       flex-wrap:wrap;justify-content:center;align-content:flex-start;z-index:1001;padding:7px 10px;
       background:rgba(24,26,33,.82);backdrop-filter:blur(8px);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.28)}
@@ -473,8 +437,6 @@ https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js>
   .cuisine-btn.active{background:var(--chip-active);border-color:var(--chip-active);color:#0b3b34;
       font-weight:600;box-shadow:0 4px 12px rgba(94,234,212,.3)}
   .cuisine-btn:focus{outline:none}
-
-  /* ---------- Export data (RHS) ---------- */
   .export-btn{position:fixed;right:12px;top:96px;z-index:1002;border:none;cursor:pointer;
       color:#06342c;background:linear-gradient(90deg,var(--brand),var(--brand-2));
       padding:10px 16px;border-radius:24px;font-size:13px;font-weight:700;
@@ -520,12 +482,6 @@ function ratingColor(r){
                  r<4.6 ? '#66C2A5' : r<4.9 ? '#2CA25F' : '#006837';
 }
 function radius(){ return 7; }
-function scoreColor(score){
-    if(score===''||score==null) return '#9e9e9e';
-    return score>80?'#800026':score>60?'#BD0026':score>40?'#E31A1C':
-                 score>20?'#FC4E2A':score>0?'#FEB24C':'#FFEDA0';
-}
-function radiusScore(score){ return score===''||score==null?3:3+(score/100)*10; }
 function popup(v){
   return `<div class="pop"><b>${v.name}</b><br><i>${v.category}${v.cuisine?' &middot; '+v.cuisine:''}</i>
     <table class="cmp">
@@ -666,17 +622,15 @@ function applyFilters(){
     });
     try{ reviewHeatL.setLatLngs(newHeat); }catch(e){}
 }
-
-// ---------- Export: venues ranked by rating (desc), with review count ----------
 function rankedVenues(){
     const rows = (window.__visible || []).slice();
     rows.sort((a,b)=>{
         const ra = a.rating===''||a.rating==null ? -1 : +a.rating;
         const rb = b.rating===''||b.rating==null ? -1 : +b.rating;
-        if(rb!==ra) return rb-ra;                       // rating desc
+        if(rb!==ra) return rb-ra;
         const ca = a.review_count===''?0:+a.review_count;
         const cb = b.review_count===''?0:+b.review_count;
-        return cb-ca;                                   // then reviews desc
+        return cb-ca;
     });
     return rows;
 }
@@ -734,13 +688,10 @@ applyFilters();
 </script></body></html>
 """
 
+HTML_TEMPLATE = HTML_HEAD + HTML_BODY
+
 
 def cmd_map(args):
-    """Read the CSV and write a standalone interactive HTML map.
-
-    Data is injected as JSON at the /*__DATA__*/ token, so `VENUES` and
-    `CENTER` are ALWAYS valid in the browser (no manual paste required).
-    """
     infile = getattr(args, "infile", None)
     if not infile:
         infile = "venues_reviews.csv" if os.path.exists("venues_reviews.csv") else None
