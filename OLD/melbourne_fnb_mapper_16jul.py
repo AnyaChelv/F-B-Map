@@ -226,6 +226,8 @@ def cmd_reviews(args):
     if not args.key:
         sys.exit("Google Places API key required: --key YOUR_KEY")
 
+    # --limit only caps how many venues we CALL the API for.
+    # We still write ALL venues back, so the CSV is never truncated.
     all_venues = read_csv(args.infile)
     venues = all_venues[:args.limit] if args.limit else all_venues
 
@@ -398,7 +400,7 @@ HTML_BODY = r"""<style>
   }
   html,body,#map{height:100%;margin:0;font-family:'Segoe UI',Inter,Arial,sans-serif}
   .leaflet-tile-pane{filter:grayscale(1) contrast(.9) brightness(1.05)}
-  .leaflet-top.leaflet-left{top:150px}
+  .leaflet-top.leaflet-left{top:104px}
   .leaflet-popup-pane{z-index:1200}
   .leaflet-popup-content-wrapper{box-shadow:0 6px 22px rgba(0,0,0,.28)}
   .pop b{font-size:14px}
@@ -430,23 +432,19 @@ HTML_BODY = r"""<style>
       font-size:12.5px;font-weight:700;box-shadow:0 6px 14px rgba(34,201,169,.35)}
   .rc-apply:hover{filter:brightness(1.05)}
 
-  /* full-width cuisine bar; position:relative so the hint can sit bottom-left */
-  .top-cuisine-bar{position:fixed;left:8px;right:8px;top:8px;display:flex;gap:4px;
-      flex-wrap:wrap;justify-content:center;align-content:flex-start;z-index:1001;
-      padding:5px 10px 16px 10px;
+  .top-cuisine-bar{position:fixed;left:8px;right:8px;top:8px;display:flex;gap:6px;
+      flex-wrap:wrap;justify-content:center;align-content:flex-start;z-index:1001;padding:7px 10px;
       background:rgba(24,26,33,.82);backdrop-filter:blur(8px);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.28)}
-  .cuisine-btn{background:transparent;border:1.5px solid rgba(255,255,255,.18);border-radius:9px;
-      padding:2px 9px;cursor:pointer;color:var(--chip-ink);font-size:10.5px;font-weight:500;
-      transition:all .15s ease;white-space:nowrap;line-height:1.25}
+  .cuisine-btn{background:transparent;border:1.5px solid rgba(255,255,255,.18);border-radius:10px;
+      padding:4px 10px;cursor:pointer;color:var(--chip-ink);font-size:11px;font-weight:500;
+      transition:all .15s ease;white-space:nowrap;line-height:1.3}
   .cuisine-btn:hover{border-color:var(--chip-active);color:#fff}
   .cuisine-btn.active{background:var(--chip-active);border-color:var(--chip-active);color:#0b3b34;
       font-weight:600;box-shadow:0 4px 12px rgba(94,234,212,.3)}
   .cuisine-btn:focus{outline:none}
+  /* chip that has an active second-layer selection gets a ring */
   .cuisine-btn.has-sub{box-shadow:0 0 0 2px var(--chip-active) inset}
-  /* hint text pinned to the bottom-left of the grey cuisine box */
-  .cuisine-hint{position:absolute;left:12px;bottom:5px;color:rgba(255,255,255,.55);
-      font-size:10.5px;font-style:italic;pointer-events:none;white-space:nowrap}
-
+  /* right-click second-layer menu */
   .cuisine-menu{position:fixed;z-index:3000;background:#fff;border-radius:12px;padding:6px;
       box-shadow:0 12px 30px rgba(0,0,0,.28);min-width:160px;max-height:340px;overflow:auto;font-size:12px}
   .cuisine-menu .cm-title{font-weight:700;color:var(--ink);padding:6px 10px 4px;font-size:12.5px;
@@ -454,24 +452,6 @@ HTML_BODY = r"""<style>
   .cuisine-menu .cm-row{padding:6px 10px;border-radius:8px;cursor:pointer;color:var(--ink)}
   .cuisine-menu .cm-row:hover{background:var(--brand-soft)}
   .cuisine-menu .cm-row.on{background:var(--brand);color:#06342c;font-weight:600}
-
-  /* modern venue search bar, sitting in the gap right of the +/- zoom buttons */
-  .venue-search{position:fixed;left:70px;top:162px;z-index:1002;width:300px;max-width:46vw}
-  .venue-search .vs-box{display:flex;align-items:center;gap:8px;background:#fff;border-radius:26px;
-      box-shadow:0 8px 22px rgba(0,0,0,.18);padding:9px 14px;border:1.5px solid transparent}
-  .venue-search .vs-box:focus-within{border-color:var(--brand)}
-  .venue-search svg{flex:0 0 auto;width:16px;height:16px;stroke:var(--muted)}
-  .venue-search input{border:none;outline:none;flex:1;font-size:13.5px;color:var(--ink);background:transparent}
-  .venue-search .vs-clear{cursor:pointer;color:var(--muted);font-size:16px;line-height:1;display:none}
-  .vs-results{margin-top:6px;background:#fff;border-radius:14px;box-shadow:0 10px 26px rgba(0,0,0,.2);
-      overflow:hidden;max-height:280px;overflow-y:auto;display:none}
-  .vs-results.open{display:block}
-  .vs-item{padding:9px 14px;cursor:pointer;border-bottom:1px solid #f0eef6}
-  .vs-item:last-child{border-bottom:none}
-  .vs-item:hover,.vs-item.active{background:var(--brand-soft)}
-  .vs-item .vs-name{font-size:13px;font-weight:600;color:var(--ink)}
-  .vs-item .vs-sub{font-size:11px;color:var(--muted)}
-  .vs-empty{padding:10px 14px;color:var(--muted);font-size:12px}
 
   .export-btn{position:fixed;right:12px;top:96px;z-index:1002;border:none;cursor:pointer;
       color:#06342c;background:linear-gradient(90deg,var(--brand),var(--brand-2));
@@ -496,17 +476,7 @@ HTML_BODY = r"""<style>
       padding:9px 16px;border-radius:22px;font-size:13px;font-weight:700}
   .ep-count{color:var(--muted);font-size:12px}
 </style></head><body>
-<div id="cuisineBar" class="top-cuisine-bar" aria-label="Cuisine selector">
-  <span class="cuisine-hint">Right click Cuisine to show more Cuisine types</span>
-</div>
-<div class="venue-search" id="venueSearch">
-  <div class="vs-box">
-    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-    <input id="vsInput" type="text" placeholder="Search for a venue by name..." autocomplete="off"/>
-    <span id="vsClear" class="vs-clear">&times;</span>
-  </div>
-  <div id="vsResults" class="vs-results"></div>
-</div>
+<div id="cuisineBar" class="top-cuisine-bar" aria-label="Cuisine selector"></div>
 <button id="exportBtn" class="export-btn" type="button">&#9776; Show list</button>
 <div id="exportPanel" class="export-panel">
   <div class="ep-head"><span>Venues by Rating</span>
@@ -539,11 +509,14 @@ function popup(v){
       <tr><td>Review score</td><td>${v.popularity_review||'-'}/100</td></tr>
     </table></div>`;
 }
+// If a venue has no cuisine tag, fall back to its OSM category (e.g. pub, cafe).
 function titleCase(s){ return s.replace(/\b\w/g, c=>c.toUpperCase()); }
 function normaliseCuisine(raw, category){
     let s = (raw||'').toString().toLowerCase().trim().replace(/[_\-]+/g,' ');
     if(!s) s = (category||'').toString().toLowerCase().trim().replace(/[_\-]+/g,' ');
     if(!s) return 'Other';
+    // Curated, FIXED buckets. Everything groups into one of these (or 'Other').
+    // Granular detail is preserved for the right-click sub-menu only.
     const map = [
       [/\b(bubble tea|boba)\b/,'Bubble Tea'],
       [/\b(juice|smoothie|acai|drinks|beverage)\b/,'Drinks & Juice'],
@@ -558,9 +531,12 @@ function normaliseCuisine(raw, category){
       [/\b(thai)\b/,'Thai'],
       [/\b(vietnamese|pho|banh mi)\b/,'Vietnamese'],
       [/\b(indian|curry|tandoori)\b/,'Indian'],
+      // Other Asian = SE/South/Central Asian + generic asian (keeps small ones grouped)
       [/\b(asian|noodle|noodles|malaysian|indonesian|singaporean|singapore|taiwanese|filipino|cambodian|burmese|balinese|nepalese|nepali|tibetan|sri lankan|pakistani|afghan|bangladeshi)\b/,'Other Asian'],
+      // Mediterranean = Med + Middle Eastern (groups Persian/Arab/Turkish/etc.)
       [/\b(mediterranean|greek|lebanese|turkish|middle eastern|falafel|kebab|souvlaki|persian|arab|israeli|yemeni|egyptian)\b/,'Mediterranean'],
       [/\b(african|ethiopian|somali|somalian|eritrean|nigerian|sudanese|kenyan|ghanaian|senegalese|moroccan|tunisian|algerian|mauritian)\b/,'African'],
+      // European = non-Italian/Med European nationalities grouped together
       [/\b(french|spanish|german|polish|portuguese|russian|croatian|balkan|dutch|danish|swiss|irish|english|british|european|norse|scandinavian)\b/,'European'],
       [/\b(fish and chips|fish & chips|fish n chips)\b/,'Fish & Chips'],
       [/\b(burger|burgers)\b/,'Burgers'],
@@ -571,11 +547,14 @@ function normaliseCuisine(raw, category){
       [/\b(seafood|fish)\b/,'Seafood'],
       [/\b(mexican|burrito|taco|tacos|latin|tex mex|argentinian|brazilian|colombian|chilean|peruvian|peruvean)\b/,'Mexican & Latin'],
       [/\b(vegan|vegetarian|salad|healthy|health food|poke)\b/,'Healthy & Veg'],
+      // generic sit-down descriptors -> Restaurant (keeps Australian/fusion/etc. grouped)
       [/\b(restaurant|bistro|diner|fine dining|fusion|international|australian|modern australian|mainstream australian|californian|local|regional|meat|cheese)\b/,'Restaurant'],
     ];
     for(const [re,label] of map){ if(re.test(s)) return label; }
+    // Anything still unmatched is grouped, never shown as its own chip.
     return 'Other';
 }
+// Proper formatting for known second-layer terms; everything else is title-cased.
 const SUB_FIX = {
   'bubble tea':'Bubble Tea','fish and chips':'Fish & Chips','fish n chips':'Fish & Chips',
   'ice cream':'Ice Cream','hot dog':'Hot Dog','fried chicken':'Fried Chicken',
@@ -590,6 +569,7 @@ function prettifySub(t){
     if(SUB_FIX[s]) return SUB_FIX[s];
     return titleCase(s);
 }
+// The specific second-layer values for a venue (a venue can list several, e.g. "chinese;dumpling").
 function subCuisineLabels(raw, category){
     let base = (raw||'').toString().toLowerCase().trim();
     if(!base) base = (category||'').toString().toLowerCase().trim();
@@ -597,8 +577,9 @@ function subCuisineLabels(raw, category){
     const parts = base.split(/[;,\/]+/).map(prettifySub).filter(Boolean);
     return Array.from(new Set(parts));
 }
+// second-layer state
 const selectedSubCuisines = new Set();
-const subMap = {};
+const subMap = {};            // top-level bucket -> Set(second-layer labels)
 let ctxMenuEl = null;
 function closeCtxMenu(){ if(ctxMenuEl){ ctxMenuEl.remove(); ctxMenuEl = null; } }
 function markChipSubState(bucket){
@@ -638,7 +619,6 @@ function openCuisineMenu(bucket, x, y){
     ctxMenuEl = menu;
 }
 document.addEventListener('click', (e)=>{ if(ctxMenuEl && !ctxMenuEl.contains(e.target)) closeCtxMenu(); });
-
 const reviewLayer = L.layerGroup();
 const reviewMarkers = [];
 const reviewHeatAll = [];
@@ -690,6 +670,7 @@ filterCtrl.addTo(map);
 function buildCuisineSelector(){
     const counts = {};
     VENUES.forEach(v=>{ const c = normaliseCuisine(v.cuisine, v.category); counts[c]=(counts[c]||0)+1; });
+    // FIXED curated bucket list (~3 rows). Nothing outside this can become a chip.
     const order = ['Cafe','Bakery','Bar','Pub','Restaurant','Italian','Chinese','Japanese','Korean','Thai',
       'Vietnamese','Indian','Other Asian','Mediterranean','European','African','Burgers','Fried Chicken',
       'Fish & Chips','Other Fast Food','Grill & BBQ','Seafood','Mexican & Latin','Bubble Tea','Drinks & Juice',
@@ -698,9 +679,7 @@ function buildCuisineSelector(){
     if(counts['Other']) arr.push('Other');
     const bar = document.getElementById('cuisineBar');
     if(!bar) return;
-    // keep the hint element; remove any previously-built chips only
-    bar.querySelectorAll('.cuisine-btn').forEach(b=>b.remove());
-    const hint = bar.querySelector('.cuisine-hint');
+    bar.innerHTML='';
     arr.forEach(c=>{
         const b = document.createElement('button');
         b.className = 'cuisine-btn';
@@ -711,7 +690,7 @@ function buildCuisineSelector(){
         b.addEventListener('click', ()=>{ b.classList.toggle('active'); applyFilters(); });
         b.addEventListener('contextmenu', (e)=>{ e.preventDefault(); e.stopPropagation();
             openCuisineMenu(c, e.clientX, e.clientY); });
-        if(hint) bar.insertBefore(b, hint); else bar.appendChild(b);
+        bar.appendChild(b);
     });
 }
 function bucketForRating(r){
@@ -820,81 +799,6 @@ const minReviewsInput = document.getElementById('minReviews');
 if(minReviewsInput) minReviewsInput.addEventListener('input', applyFilters);
 buildCuisineSelector();
 applyFilters();
-
-// ---------- Venue name search ----------
-const vsInput = document.getElementById('vsInput');
-const vsResults = document.getElementById('vsResults');
-const vsClear = document.getElementById('vsClear');
-let vsActive = -1, vsMatches = [];
-
-function vsRender(matches){
-    vsMatches = matches;
-    vsActive = -1;
-    if(!matches.length){
-        vsResults.innerHTML = '<div class="vs-empty">No venues found</div>';
-        vsResults.classList.add('open');
-        return;
-    }
-    vsResults.innerHTML = matches.map((m,i)=>{
-        const v = m._venue || {};
-        const sub = [v.suburb, v.cuisine].filter(Boolean).join(' \u00b7 ');
-        const rt = (v.rating!==''&&v.rating!=null)?` \u2605 ${v.rating}`:'';
-        return `<div class="vs-item" data-i="${i}">
-                  <div class="vs-name">${v.name||'(unnamed)'}${rt}</div>
-                  <div class="vs-sub">${sub}</div></div>`;
-    }).join('');
-    vsResults.classList.add('open');
-    vsResults.querySelectorAll('.vs-item').forEach(el=>{
-        el.addEventListener('click', ()=>vsGo(parseInt(el.dataset.i,10)));
-    });
-}
-
-function vsSearch(q){
-    q = q.trim().toLowerCase();
-    if(!q){ vsResults.classList.remove('open'); vsResults.innerHTML=''; return; }
-    const starts = [], contains = [];
-    for(const m of reviewMarkers){
-        const n = ((m._venue&&m._venue.name)||'').toLowerCase();
-        if(!n) continue;
-        if(n.startsWith(q)) starts.push(m);
-        else if(n.includes(q)) contains.push(m);
-        if(starts.length>=20) break;
-    }
-    vsRender(starts.concat(contains).slice(0,20));
-}
-
-function vsGo(i){
-    const m = vsMatches[i];
-    if(!m) return;
-    // ensure the marker is on the map even if filters hid it
-    if(!reviewLayer.hasLayer(m)) m.addTo(reviewLayer);
-    map.setView(m.getLatLng(), Math.max(map.getZoom(), 17), {animate:true});
-    m.openPopup();
-    vsResults.classList.remove('open');
-    vsInput.value = (m._venue&&m._venue.name)||'';
-    vsClear.style.display = 'inline';
-}
-
-vsInput.addEventListener('input', ()=>{
-    vsClear.style.display = vsInput.value ? 'inline' : 'none';
-    vsSearch(vsInput.value);
-});
-vsInput.addEventListener('keydown', (e)=>{
-    const items = vsResults.querySelectorAll('.vs-item');
-    if(e.key==='ArrowDown'){ e.preventDefault(); vsActive=Math.min(vsActive+1,items.length-1); }
-    else if(e.key==='ArrowUp'){ e.preventDefault(); vsActive=Math.max(vsActive-1,0); }
-    else if(e.key==='Enter'){ e.preventDefault(); vsGo(vsActive>=0?vsActive:0); return; }
-    else return;
-    items.forEach((el,idx)=>el.classList.toggle('active', idx===vsActive));
-    if(items[vsActive]) items[vsActive].scrollIntoView({block:'nearest'});
-});
-vsClear.addEventListener('click', ()=>{
-    vsInput.value=''; vsClear.style.display='none';
-    vsResults.classList.remove('open'); vsResults.innerHTML=''; vsInput.focus();
-});
-document.addEventListener('click', (e)=>{
-    if(!document.getElementById('venueSearch').contains(e.target)) vsResults.classList.remove('open');
-});
 </script></body></html>
 """
 

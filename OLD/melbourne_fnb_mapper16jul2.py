@@ -398,7 +398,7 @@ HTML_BODY = r"""<style>
   }
   html,body,#map{height:100%;margin:0;font-family:'Segoe UI',Inter,Arial,sans-serif}
   .leaflet-tile-pane{filter:grayscale(1) contrast(.9) brightness(1.05)}
-  .leaflet-top.leaflet-left{top:150px}
+  .leaflet-top.leaflet-left{top:104px}
   .leaflet-popup-pane{z-index:1200}
   .leaflet-popup-content-wrapper{box-shadow:0 6px 22px rgba(0,0,0,.28)}
   .pop b{font-size:14px}
@@ -431,13 +431,13 @@ HTML_BODY = r"""<style>
   .rc-apply:hover{filter:brightness(1.05)}
 
   /* full-width cuisine bar; position:relative so the hint can sit bottom-left */
-  .top-cuisine-bar{position:fixed;left:8px;right:8px;top:8px;display:flex;gap:4px;
+  .top-cuisine-bar{position:fixed;left:8px;right:8px;top:8px;display:flex;gap:6px;
       flex-wrap:wrap;justify-content:center;align-content:flex-start;z-index:1001;
-      padding:5px 10px 16px 10px;
+      padding:7px 10px 20px 10px;
       background:rgba(24,26,33,.82);backdrop-filter:blur(8px);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.28)}
-  .cuisine-btn{background:transparent;border:1.5px solid rgba(255,255,255,.18);border-radius:9px;
-      padding:2px 9px;cursor:pointer;color:var(--chip-ink);font-size:10.5px;font-weight:500;
-      transition:all .15s ease;white-space:nowrap;line-height:1.25}
+  .cuisine-btn{background:transparent;border:1.5px solid rgba(255,255,255,.18);border-radius:10px;
+      padding:4px 10px;cursor:pointer;color:var(--chip-ink);font-size:11px;font-weight:500;
+      transition:all .15s ease;white-space:nowrap;line-height:1.3}
   .cuisine-btn:hover{border-color:var(--chip-active);color:#fff}
   .cuisine-btn.active{background:var(--chip-active);border-color:var(--chip-active);color:#0b3b34;
       font-weight:600;box-shadow:0 4px 12px rgba(94,234,212,.3)}
@@ -456,7 +456,7 @@ HTML_BODY = r"""<style>
   .cuisine-menu .cm-row.on{background:var(--brand);color:#06342c;font-weight:600}
 
   /* modern venue search bar, sitting in the gap right of the +/- zoom buttons */
-  .venue-search{position:fixed;left:70px;top:162px;z-index:1002;width:300px;max-width:46vw}
+  .venue-search{position:fixed;left:70px;top:116px;z-index:1002;width:300px;max-width:46vw}
   .venue-search .vs-box{display:flex;align-items:center;gap:8px;background:#fff;border-radius:26px;
       box-shadow:0 8px 22px rgba(0,0,0,.18);padding:9px 14px;border:1.5px solid transparent}
   .venue-search .vs-box:focus-within{border-color:var(--brand)}
