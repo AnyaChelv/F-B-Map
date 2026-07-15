@@ -131,12 +131,12 @@ def build_overpass_query(bbox):
     return f"""
 [out:json][timeout:180];
 (
-  node["amenity"~"^({am})$"]({box});
-  way ["amenity"~"^({am})$"]({box});
-  node["shop"~"^({sh})$"]({box});
-  way ["shop"~"^({sh})$"]({box});
-  node["cuisine"~"bubble_tea"]({box});
-  way ["cuisine"~"bubble_tea"]({box});
+  node{box};
+  way {box};
+  node{box};
+  way {box};
+  node{box};
+  way {box};
 );
 out center tags;
 """
@@ -417,12 +417,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Melbourne F&B Popularity Map</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<link rel="stylom/leaflet@1.9.4/dist/leaflet.css
+1.9.4/dist/leaflet.js"></script>
+https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js>
 <style>
   :root{
-    --brand:#6C3EF4; --brand-2:#8B5CFF; --brand-soft:#F1ECFF;
+    /* rating filter now uses the same green as the active cuisine chips */
+    --brand:#22c9a9; --brand-2:#5eead4; --brand-soft:#E6FBF5;
     --ink:#2b2440; --muted:#8a8399; --line:#ece8f5;
     --chip-ink:#c9d1d9; --chip-active:#5eead4;
   }
@@ -438,7 +439,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   table.cmp{border-collapse:collapse;margin-top:4px;font-size:12px}
   table.cmp td{border:1px solid #ddd;padding:2px 6px}
   .rating-card{background:#fff;border-radius:18px;padding:16px 16px 14px;width:260px;
-      box-shadow:0 12px 30px rgba(76,62,244,.14),0 2px 6px rgba(0,0,0,.06);font-size:13px;color:var(--ink)}
+      box-shadow:0 12px 30px rgba(34,201,169,.16),0 2px 6px rgba(0,0,0,.06);font-size:13px;color:var(--ink)}
   .rc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
   .rc-title{font-weight:700;font-size:15px}
   .rc-clear{background:none;border:none;color:var(--brand);font-weight:600;cursor:pointer;
@@ -447,7 +448,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .rate-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin:5px 0;
       border:1.5px solid var(--line);border-radius:12px;cursor:pointer;transition:all .15s ease;background:#fff}
   .rate-row:hover{border-color:var(--brand-2);background:var(--brand-soft)}
-  .rate-row.sel{border-color:var(--brand);background:var(--brand-soft);box-shadow:0 4px 12px rgba(108,62,244,.15)}
+  .rate-row.sel{border-color:var(--brand);background:var(--brand-soft);box-shadow:0 4px 12px rgba(34,201,169,.18)}
   .rate-row .lbl-txt{font-size:12.5px;font-weight:600;color:var(--ink)}
   .rate-row .chk{width:18px;height:18px;border-radius:6px;border:2px solid #cfc8e3;
       display:inline-block;position:relative;flex:0 0 auto;background:#fff}
@@ -457,22 +458,55 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .rc-sub{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
   .rc-sub label{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}
   .rc-sub input[type=number]{width:80px;border:1.5px solid var(--line);border-radius:8px;padding:4px 8px;font-size:12px;color:var(--ink)}
-  .rc-apply{margin-top:12px;width:100%;border:none;cursor:pointer;color:#fff;
+  .rc-apply{margin-top:12px;width:100%;border:none;cursor:pointer;color:#06342c;
       background:linear-gradient(90deg,var(--brand),var(--brand-2));padding:11px;border-radius:26px;
-      font-size:14px;font-weight:600;box-shadow:0 8px 18px rgba(108,62,244,.35)}
+      font-size:14px;font-weight:700;box-shadow:0 8px 18px rgba(34,201,169,.35)}
   .rc-apply:hover{filter:brightness(1.05)}
-  .top-cuisine-bar{position:fixed;left:50%;top:12px;transform:translateX(-50%);display:flex;gap:8px;
-      flex-wrap:wrap;justify-content:center;z-index:1001;padding:8px 10px;max-width:82vw;
-      background:rgba(24,26,33,.82);backdrop-filter:blur(8px);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.28)}
-  .cuisine-btn{background:transparent;border:1.5px solid rgba(255,255,255,.18);border-radius:12px;
-      padding:7px 14px;cursor:pointer;color:var(--chip-ink);font-size:13px;font-weight:500;
-      transition:all .15s ease;white-space:nowrap}
+  /* full-width cuisine bar (edge to edge), smaller font -> fits ~2 rows */
+  .top-cuisine-bar{position:fixed;left:8px;right:8px;top:8px;display:flex;gap:6px;
+      flex-wrap:wrap;justify-content:center;align-content:flex-start;z-index:1001;padding:7px 10px;
+      background:rgba(24,26,33,.82);backdrop-filter:blur(8px);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.28)}
+  .cuisine-btn{background:transparent;border:1.5px solid rgba(255,255,255,.18);border-radius:10px;
+      padding:4px 10px;cursor:pointer;color:var(--chip-ink);font-size:11px;font-weight:500;
+      transition:all .15s ease;white-space:nowrap;line-height:1.3}
   .cuisine-btn:hover{border-color:var(--chip-active);color:#fff}
   .cuisine-btn.active{background:var(--chip-active);border-color:var(--chip-active);color:#0b3b34;
       font-weight:600;box-shadow:0 4px 12px rgba(94,234,212,.3)}
   .cuisine-btn:focus{outline:none}
+
+  /* ---------- Export data (RHS) ---------- */
+  .export-btn{position:fixed;right:12px;top:96px;z-index:1002;border:none;cursor:pointer;
+      color:#06342c;background:linear-gradient(90deg,var(--brand),var(--brand-2));
+      padding:10px 16px;border-radius:24px;font-size:13px;font-weight:700;
+      box-shadow:0 8px 18px rgba(34,201,169,.35)}
+  .export-btn:hover{filter:brightness(1.05)}
+  .export-panel{position:fixed;top:0;right:0;height:100%;width:390px;max-width:92vw;background:#fff;
+      z-index:2000;box-shadow:-10px 0 34px rgba(0,0,0,.28);display:none;flex-direction:column}
+  .export-panel.open{display:flex}
+  .ep-head{background:#159b84;color:#fff;padding:14px 16px;font-weight:700;font-size:15px;
+      display:flex;justify-content:space-between;align-items:center}
+  .ep-close{cursor:pointer;background:none;border:none;color:#fff;font-size:20px;line-height:1}
+  .ep-body{overflow:auto;flex:1}
+  table.exp{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.exp thead th{background:#159b84;color:#fff;text-align:left;padding:9px 12px;position:sticky;top:0}
+  table.exp thead th.num{text-align:right}
+  table.exp td{padding:8px 12px;border-bottom:1px solid #eee;color:var(--ink)}
+  table.exp td.num{text-align:right;font-variant-numeric:tabular-nums}
+  table.exp tr:nth-child(even){background:#f6fbfa}
+  .ep-actions{padding:12px 16px;border-top:1px solid #eee;display:flex;gap:10px;align-items:center}
+  .ep-dl{border:none;cursor:pointer;color:#06342c;background:linear-gradient(90deg,var(--brand),var(--brand-2));
+      padding:9px 16px;border-radius:22px;font-size:13px;font-weight:700}
+  .ep-count{color:var(--muted);font-size:12px}
 </style></head><body>
 <div id="cuisineBar" class="top-cuisine-bar" aria-label="Cuisine selector"></div>
+<button id="exportBtn" class="export-btn" type="button">&#11015; Export Data</button>
+<div id="exportPanel" class="export-panel">
+  <div class="ep-head"><span>Venues by Rating</span>
+    <button id="epClose" class="ep-close" type="button">&times;</button></div>
+  <div class="ep-body" id="epBody"></div>
+  <div class="ep-actions"><button id="epDownload" class="ep-dl" type="button">Download CSV</button>
+    <span class="ep-count" id="epCount"></span></div>
+</div>
 <div id="map"></div>
 <script>
 /*__DATA__*/
@@ -485,7 +519,7 @@ function ratingColor(r){
     return r<3.5 ? '#FF7F00' : r<4.0 ? '#FFC04D' : r<4.3 ? '#C7E86A' :
                  r<4.6 ? '#66C2A5' : r<4.9 ? '#2CA25F' : '#006837';
 }
-function radius(){ return 4; }
+function radius(){ return 7; }
 function scoreColor(score){
     if(score===''||score==null) return '#9e9e9e';
     return score>80?'#800026':score>60?'#BD0026':score>40?'#E31A1C':
@@ -495,18 +529,10 @@ function radiusScore(score){ return score===''||score==null?3:3+(score/100)*10; 
 function popup(v){
   return `<div class="pop"><b>${v.name}</b><br><i>${v.category}${v.cuisine?' &middot; '+v.cuisine:''}</i>
     <table class="cmp">
-      <tr><td><b>Method A - Reviews</b></td><td></td></tr>
       <tr><td>Rating</td><td>${v.rating||'-'} &#9733;</td></tr>
       <tr><td>Review count</td><td>${v.review_count||'-'}</td></tr>
-      <tr><td>Velocity (/wk)</td><td>${v.review_velocity_per_week||'-'}</td></tr>
       <tr><td>Review score</td><td>${v.popularity_review||'-'}/100</td></tr>
-      <tr><td><b>Method B - Foot traffic</b></td><td></td></tr>
-      <tr><td>Monthly visits (ABS)</td><td>${v.foot_monthly?Number(v.foot_monthly).toLocaleString():'-'}</td></tr>
-      <tr><td>Daily avg</td><td>${v.foot_daily_avg||'-'}</td></tr>
-      <tr><td>Dwell (min)</td><td>${v.dwell_min||'-'}</td></tr>
-      <tr><td>Foot score</td><td>${v.popularity_foot||'-'}/100</td></tr>
-    </table>
-    ${v.website?`<a href="${v.website}" target="_blank">website</a>`:''}</div>`;
+    </table></div>`;
 }
 function normaliseCuisine(raw){
     let s = (raw||'').toString().toLowerCase().trim().replace(/[_\-]+/g,' ');
@@ -553,6 +579,7 @@ VENUES.forEach(v=>{
   const rc = (v.review_count===''||v.review_count==null)?null:(isFinite(+v.review_count)?+v.review_count:null);
   r._review_count = rc;
   r._cuisine = normaliseCuisine(v.cuisine);
+  r._venue = v;
   reviewMarkers.push(r);
   if(rating!=null) reviewHeatAll.push([lat,lon,(rating/5)]);
 });
@@ -622,6 +649,7 @@ function applyFilters(){
     const minReviews = minReviewsEl ? (parseInt(minReviewsEl.value,10)||0) : 0;
     reviewLayer.clearLayers();
     const newHeat = [];
+    window.__visible = [];
     const selectedCuisines = new Set();
     document.querySelectorAll('.cuisine-btn.active').forEach(b=>selectedCuisines.add(b.dataset.cuisine));
     reviewMarkers.forEach(m=>{
@@ -632,11 +660,62 @@ function applyFilters(){
         const cuisineOk = (selectedCuisines.size===0) ? true : selectedCuisines.has(c);
         if(((b==='none' && showNone) || (b!=='none' && checked.has(b))) && rcOk && cuisineOk){
             m.addTo(reviewLayer);
+            window.__visible.push(m._venue);
             if(m._rating!=null) newHeat.push([m.getLatLng().lat, m.getLatLng().lng, (m._rating/5)]);
         }
     });
     try{ reviewHeatL.setLatLngs(newHeat); }catch(e){}
 }
+
+// ---------- Export: venues ranked by rating (desc), with review count ----------
+function rankedVenues(){
+    const rows = (window.__visible || []).slice();
+    rows.sort((a,b)=>{
+        const ra = a.rating===''||a.rating==null ? -1 : +a.rating;
+        const rb = b.rating===''||b.rating==null ? -1 : +b.rating;
+        if(rb!==ra) return rb-ra;                       // rating desc
+        const ca = a.review_count===''?0:+a.review_count;
+        const cb = b.review_count===''?0:+b.review_count;
+        return cb-ca;                                   // then reviews desc
+    });
+    return rows;
+}
+function buildExportTable(){
+    const rows = rankedVenues();
+    let h = `<table class="exp"><thead><tr><th>#</th><th>Venue</th>`
+          + `<th class="num">Rating</th><th class="num">Reviews</th></tr></thead><tbody>`;
+    rows.forEach((v,i)=>{
+        const rating = (v.rating===''||v.rating==null)?'-':(+v.rating).toFixed(1);
+        const rc = (v.review_count===''||v.review_count==null)?'-':Number(v.review_count).toLocaleString();
+        h += `<tr><td class="num">${i+1}</td><td>${v.name}</td>`
+           + `<td class="num">${rating}</td><td class="num">${rc}</td></tr>`;
+    });
+    h += `</tbody></table>`;
+    document.getElementById('epBody').innerHTML = h;
+    document.getElementById('epCount').textContent = `${rows.length} venues`;
+}
+function downloadCSV(){
+    const rows = rankedVenues();
+    let csv = 'rank,venue,rating,review_count\n';
+    rows.forEach((v,i)=>{
+        const name = '"'+(v.name||'').replace(/"/g,'""')+'"';
+        const rating = (v.rating===''||v.rating==null)?'':v.rating;
+        const rc = (v.review_count===''||v.review_count==null)?'':v.review_count;
+        csv += `${i+1},${name},${rating},${rc}\n`;
+    });
+    const blob = new Blob([csv], {type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'venues_by_rating.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+    buildExportTable();
+    document.getElementById('exportPanel').classList.add('open');
+});
+document.getElementById('epClose').addEventListener('click', ()=>
+    document.getElementById('exportPanel').classList.remove('open'));
+document.getElementById('epDownload').addEventListener('click', downloadCSV);
 document.querySelectorAll('.rate-row.ratingBucket').forEach(row=>
     row.addEventListener('click', ()=>{ row.classList.toggle('sel'); applyFilters(); }) );
 const rcClear = document.getElementById('rcClear');
